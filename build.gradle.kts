@@ -6,6 +6,15 @@ group = "com.jjt.ingsis"
 version = "0.0.1-SNAPSHOT"
 
 dependencies {
+    implementation("org.springframework.boot:spring-boot-starter-actuator")
+    implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("tools.jackson.module:jackson-module-kotlin")
+
+    runtimeOnly("org.postgresql:postgresql")
+    testRuntimeOnly("com.h2database:h2")
+}
+
+tasks.named<org.springframework.boot.gradle.tasks.bundling.BootJar>("bootJar") {
+    archiveFileName.set("app.jar")
 }
