@@ -30,3 +30,13 @@ replay_pid*
 build/
 .idea/
 *.iml
+
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+gradle.properties
+.credentials/
+secrets/
+*.pem
+*.key
