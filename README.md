@@ -1,6 +1,8 @@
 # Permissions Service
 
-Servicio HTTP de permisos de Snippet Searcher con Kotlin, Spring Boot y conexión a PostgreSQL mediante Spring Data JPA. Todavía no define entidades, tablas ni endpoints de negocio. Hibernate no crea ni modifica el esquema automáticamente.
+Servicio HTTP de permisos de Snippet Searcher con Kotlin, Spring Boot y PostgreSQL mediante JDBC. Registra el propietario de cada snippet y comprueba si un actor puede modificarlo. Flyway crea y versiona el esquema; no se utiliza generación automática de tablas con Hibernate.
+
+El contrato HTTP, las respuestas idempotentes y los errores Problem Details están documentados en [docs/ownership.md](docs/ownership.md), con ejemplos verificados en cada build. La API es interna y todavía no autentica al caller.
 
 Usa `jjt.spring-service:0.2.0` de `gradle-conventions`, JDK 21 y el wrapper Gradle 9.3.0.
 
@@ -57,7 +59,7 @@ Los dos secretos son obligatorios y se montan únicamente durante el comando de 
 
 ## Docker: levantar permisos con PostgreSQL 18.6
 
-Esta prueba independiente usa dos contenedores. El Compose del proyecto vivirá solamente en `snippets-service`; este repositorio no incorpora otro Compose.
+Esta prueba independiente usa dos contenedores. El Compose compartido del proyecto corresponde al repositorio `infra`; este repositorio no incorpora otro Compose.
 
 ```bash
 cp .env.example .env
@@ -118,7 +120,7 @@ curl -i http://localhost:8081/actuator/health
 
 Con la base detenida, la salud debe terminar en HTTP `503` y `DOWN`; la consulta puede tardar hasta el timeout de conexión. Tras iniciar la base, esperar que esté `healthy` y comprobar que la aplicación vuelve a `UP`.
 
-Para comprobar persistencia, ejecutar `SELECT version()` y crear un dato de prueba en PostgreSQL, retirar y recrear solamente el contenedor `permissions-db` con el mismo comando y volumen, y verificar que el dato sigue presente. No cambiar a una versión mayor de PostgreSQL reutilizando directamente este volumen.
+Para comprobar persistencia, registrar un owner mediante `PUT /ownership/{snippetId}`, recrear solamente el contenedor `permissions-service` con el mismo comando y verificarlo mediante `GET /ownership/{snippetId}`. También se puede recrear `permissions-db` conservando su volumen y consultar la misma relación. No cambiar a una versión mayor de PostgreSQL reutilizando directamente este volumen.
 
 Para revisar que los secretos de build no están configurados en runtime:
 
@@ -129,7 +131,7 @@ docker history --no-trunc jjt-permissions:local
 
 Las credenciales de Packages no deben aparecer. Las variables y contraseñas de PostgreSQL sí forman parte de la configuración de los contenedores de desarrollo.
 
-Los tests de contexto y HTTP usan H2 únicamente en el perfil `test`. Ejecutar con JDK 21 y credenciales de Packages configuradas:
+Los tests de contexto, HTTP y persistencia usan PostgreSQL 18.6 con Testcontainers. Docker debe estar iniciado; los contenedores temporales se eliminan automáticamente al finalizar el proceso de pruebas. Ejecutar con JDK 21 y credenciales de Packages configuradas:
 
 ```bash
 sh ./gradlew check --no-daemon
@@ -141,7 +143,7 @@ También se puede verificar usando la convención clonada como carpeta hermana, 
 sh ./gradlew check --no-daemon --include-build ../gradle-conventions
 ```
 
-H2 no sustituye la verificación de conexión con PostgreSQL 18.6.
+Las pruebas también verifican los ejemplos del contrato, registros concurrentes, fallas técnicas y migraciones. Para verificar el empaquetado junto con los checks, agregar `bootJar` al comando.
 
 ## Detener y limpiar
 
@@ -168,7 +170,7 @@ Las variables `POSTGRES_*` inicializan un volumen vacío. Cambiar `.env` no camb
 
 ## Contrato para el Compose central
 
-Clonar `snippets-service` y `permissions-service` como carpetas hermanas. Desde un `compose.yaml` ubicado en `snippets-service`, la imagen de permisos se construye con contexto `../permissions-service` y su Dockerfile predeterminado.
+Clonar `infra`, `snippets-service`, `permissions-service` y `printscript-service` como carpetas hermanas. Desde el Compose ubicado en `infra`, la imagen de permisos se construye con contexto `../permissions-service` y su Dockerfile predeterminado. Levantar el entorno desde ese directorio con `docker compose up --build`.
 
 El Compose debe suministrar:
 
@@ -179,3 +181,7 @@ El Compose debe suministrar:
 - Una dependencia `service_healthy` respecto de PostgreSQL antes de iniciar permisos.
 
 Los demás contenedores llaman a permisos mediante `http://permissions-service:8080`. Su endpoint de salud es `/actuator/health`.
+
+El usuario de PostgreSQL debe poder crear el esquema de ownership y el historial de Flyway. No se necesita conexión desde Permissions a Snippets o PrintScript.
+
+`.gitattributes` garantiza LF en `gradlew` y scripts Linux. Después de actualizar un checkout previo con CRLF, restaurar `gradlew` desde Git únicamente si no tiene cambios locales que preservar.
