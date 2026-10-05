@@ -6,6 +6,10 @@ El contrato HTTP, las respuestas idempotentes y los errores Problem Details est�
 
 Usa `jjt.spring-service:0.2.0` de `gradle-conventions`, JDK 21 y el wrapper Gradle 9.3.0.
 
+Gradle selecciona JDK 21 para su daemon mediante `gradle/gradle-daemon-jvm.properties`, aunque el Java predeterminado de la terminal sea otra versión compatible con el wrapper. Debe haber un JDK 21 instalado.
+
+Si no están definidas ambas credenciales `GITHUB_ACTOR` y `GITHUB_TOKEN`, y existe `../gradle-conventions`, el build usa automáticamente esa copia local. En ese entorno alcanza con `sh ./gradlew build --no-daemon`. Con credenciales definidas, CI y los builds Docker siguen utilizando la convención publicada. En un clon sin la carpeta hermana se necesitan las credenciales de GitHub Packages.
+
 ```powershell
 .\gradlew.bat check
 .\gradlew.bat bootRun
