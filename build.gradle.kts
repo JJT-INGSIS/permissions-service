@@ -7,12 +7,15 @@ version = "0.0.1-SNAPSHOT"
 
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-actuator")
-    implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+    implementation("org.springframework.boot:spring-boot-starter-jdbc")
+    implementation("org.springframework.boot:spring-boot-starter-flyway")
+    implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("tools.jackson.module:jackson-module-kotlin")
 
     runtimeOnly("org.postgresql:postgresql")
-    testRuntimeOnly("com.h2database:h2")
+    runtimeOnly("org.flywaydb:flyway-database-postgresql")
+    testImplementation("org.testcontainers:testcontainers-postgresql")
 }
 
 tasks.named<org.springframework.boot.gradle.tasks.bundling.BootJar>("bootJar") {
