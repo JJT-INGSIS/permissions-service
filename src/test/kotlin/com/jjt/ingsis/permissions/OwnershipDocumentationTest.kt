@@ -16,7 +16,7 @@ class OwnershipDocumentationTest
         @Test
         fun documentedJsonExamplesMatchRealHttpResponses() {
             val examples =
-                Regex("```json\\n([\\s\\S]*?)\\n```")
+                Regex("```json\\r?\\n([\\s\\S]*?)\\r?\\n```")
                     .findAll(Files.readString(Path.of("docs/ownership.md")))
                     .map { it.groupValues[1] }
                     .toList()
