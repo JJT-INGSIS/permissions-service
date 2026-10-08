@@ -192,9 +192,9 @@ El usuario de PostgreSQL debe poder crear el esquema de ownership y el historial
 
 ## CI, publicación y branches — SNI-23
 
-Las ramas por cambio nacen desde `dev` y vuelven mediante PR; la promoción es PR `dev` → `main`. `main` sigue siendo la default branch. Usar squash para cambios individuales y merge commit para promociones. Proteger dev/main con PR, CI requerido y actualización con la base, sin aprobación humana obligatoria.
+Las ramas por cambio nacen desde `dev` y vuelven mediante PR; la promoción es PR `dev` → `main`. `dev` es la default branch. Usar squash para cambios individuales y merge commit para promociones. Proteger dev/main con PR, CI requerido y actualización con la base, sin aprobación humana obligatoria.
 
-`.github/workflows/pipeline.yml` define los triggers y llama a `kotlin-service-pipeline.yml@v0.3.0` de [github-workflows](https://github.com/JJT-INGSIS/github-workflows). Publicar ese tag antes de integrar los callers definitivos; para verificar el candidato, usar temporalmente su SHA siguiendo el README central.
+`.github/workflows/pipeline.yml` define los triggers y llama a `kotlin-service-pipeline.yml@v0.3.1` de [github-workflows](https://github.com/JJT-INGSIS/github-workflows). Publicar ese tag antes de integrar los callers definitivos; para verificar el candidato, usar temporalmente su SHA siguiendo el README central.
 
 | Evento | Resultado |
 | --- | --- |
@@ -203,7 +203,7 @@ Las ramas por cambio nacen desde `dev` y vuelven mediante PR; la promoción es P
 | Push a main | CI; promoción a prod pendiente de SNI-25 |
 | Ejecución manual en dev/main | CI; publica solo si se activa `publish` |
 
-`workflow_dispatch` estará disponible al integrar el caller a `main`. Se conservan los IDs del check `verify / verify / build`; confirmar su nombre exacto en Actions antes de exigirlo. Si CI falla o se cancela, no se publica.
+`workflow_dispatch` está definido en la default branch, actualmente `dev`. Se conservan los IDs del check `verify / verify / build`; confirmar su nombre exacto en Actions antes de exigirlo. Si CI falla o se cancela, no se publica.
 
 Paquete: `ghcr.io/jjt-ingsis/permissions-service`. El resumen informa SHA, Git tree, plataformas y digest. Usar `image-ref` (`imagen@sha256:...`) para descargar/desplegar; los tags `sha-<SHA completo>` y `run-<run_id>-<run_attempt>` sirven para localizar publicaciones. PostgreSQL y sus credenciales continúan siendo configuración externa; no se incluyen en la imagen.
 
