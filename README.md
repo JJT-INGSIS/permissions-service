@@ -189,3 +189,28 @@ Los demás contenedores llaman a permisos mediante `http://permissions-service:8
 El usuario de PostgreSQL debe poder crear el esquema de ownership y el historial de Flyway. No se necesita conexión desde Permissions a Snippets o PrintScript.
 
 `.gitattributes` garantiza LF en `gradlew` y scripts Linux. Después de actualizar un checkout previo con CRLF, restaurar `gradlew` desde Git únicamente si no tiene cambios locales que preservar.
+
+## CI, publicación y branches — SNI-23
+
+Las ramas por cambio nacen desde `dev` y vuelven mediante PR; la promoción es PR `dev` → `main`. `main` sigue siendo la default branch. Usar squash para cambios individuales y merge commit para promociones. Proteger dev/main con PR, CI requerido y actualización con la base, sin aprobación humana obligatoria.
+
+`.github/workflows/pipeline.yml` define los triggers y llama a `kotlin-service-pipeline.yml@v0.3.0` de [github-workflows](https://github.com/JJT-INGSIS/github-workflows). Publicar ese tag antes de integrar los callers definitivos; para verificar el candidato, usar temporalmente su SHA siguiendo el README central.
+
+| Evento | Resultado |
+| --- | --- |
+| PR a dev/main | CI con `build`; no publica |
+| Push a dev | CI → publicar únicamente la imagen de permisos |
+| Push a main | CI; promoción a prod pendiente de SNI-25 |
+| Ejecución manual en dev/main | CI; publica solo si se activa `publish` |
+
+`workflow_dispatch` estará disponible al integrar el caller a `main`. Se conservan los IDs del check `verify / verify / build`; confirmar su nombre exacto en Actions antes de exigirlo. Si CI falla o se cancela, no se publica.
+
+Paquete: `ghcr.io/jjt-ingsis/permissions-service`. El resumen informa SHA, Git tree, plataformas y digest. Usar `image-ref` (`imagen@sha256:...`) para descargar/desplegar; los tags `sha-<SHA completo>` y `run-<run_id>-<run_attempt>` sirven para localizar publicaciones. PostgreSQL y sus credenciales continúan siendo configuración externa; no se incluyen en la imagen.
+
+`GH_PACKAGES_USER` y `GH_PACKAGES_READ_TOKEN` son secrets de dependencias, preferentemente de organización con acceso a este repo. Se reenvían como secretos BuildKit. La publicación usa el `GITHUB_TOKEN` automático del repo con `packages: write`, sin PAT adicional de escritura.
+
+`DOCKER_PLATFORMS` es una variable de repositorio opcional; default `linux/amd64`. Confirmar la arquitectura con Thiago. Valores admitidos: `linux/amd64`, `linux/arm64` o `linux/amd64,linux/arm64`.
+
+Preparar GitHub Environments `dev` limitado a dev y `prod` limitado a main. El contrato de SNI-25 define variables `SSH_HOST`, `SSH_USER`, `SSH_PORT` y secrets `SSH_PRIVATE_KEY`, `SSH_KNOWN_HOSTS`. Los valores reales se cargan/verifican con las VMs y el stack disponibles. Estos environments no configuran automáticamente el datasource ni el perfil de Spring.
+
+Ver inputs/outputs, visibilidad de paquetes, permisos y orden de integración en el [README central](https://github.com/JJT-INGSIS/github-workflows/blob/main/README.md). Las primeras publicaciones y verificaciones del pipeline nuevo quedan pendientes de integrar/publicar la versión central.
