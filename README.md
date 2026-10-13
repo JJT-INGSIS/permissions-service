@@ -190,27 +190,63 @@ El usuario de PostgreSQL debe poder crear el esquema de ownership y el historial
 
 `.gitattributes` garantiza LF en `gradlew` y scripts Linux. Después de actualizar un checkout previo con CRLF, restaurar `gradlew` desde Git únicamente si no tiene cambios locales que preservar.
 
-## CI, publicación y branches — SNI-23
+## CI/CD y branches — SNI-23 / SNI-25
 
-Las ramas por cambio nacen desde `dev` y vuelven mediante PR; la promoción es PR `dev` → `main`. `dev` es la default branch. Usar squash para cambios individuales y merge commit para promociones. Proteger dev/main con PR, CI requerido y actualización con la base, sin aprobación humana obligatoria.
+Crear ramas cortas desde `dev`, abrir PR a dev y promover mediante PR dev → main.
+Dev es la default branch; usar squash para cambios individuales y merge commit
+para promociones. Main debe exigir PR y CI con base actualizada, aplicar las reglas
+a administradores y no admitir bypass de pushes directos. El merge de esa PR es
+la autorización humana; no se agrega otro approval en GitHub Environments.
 
-`.github/workflows/pipeline.yml` define los triggers y llama a `kotlin-service-pipeline.yml@v0.3.1` de [github-workflows](https://github.com/JJT-INGSIS/github-workflows). Publicar ese tag antes de integrar los callers definitivos; para verificar el candidato, usar temporalmente su SHA siguiendo el README central.
+El caller `.github/workflows/pipeline.yml` prepara
+`kotlin-service-pipeline.yml@v0.4.0` de [github-workflows](https://github.com/JJT-INGSIS/github-workflows).
+**Esta versión debe integrarse, publicarse y comprobarse antes de integrar el caller.**
+El candidato se prueba por SHA siguiendo la
+[guía central](https://github.com/JJT-INGSIS/github-workflows/blob/main/docs/sni-25-integration.md).
 
 | Evento | Resultado |
 | --- | --- |
-| PR a dev/main | CI con `build`; no publica |
-| Push a dev | CI → publicar únicamente la imagen de permisos |
-| Push a main | CI; promoción a prod pendiente de SNI-25 |
-| Ejecución manual en dev/main | CI; publica solo si se activa `publish` |
+| PR dev/main | `build` completo y agregador requerido; sin publicación ni despliegue |
+| Push dev | CI → publicar imagen; con CD habilitado, desplegar y verificar dev |
+| Push main | CI → recuperar digest verificado del mismo Git tree → prod, sin reconstruir |
+| Manual dev | CI; publicación opcional o incluida por CD habilitado |
+| Manual main | CI y reintento de promoción; activar `publish` falla |
 
-`workflow_dispatch` está definido en la default branch, actualmente `dev`. Se conservan los IDs del check `verify / verify / build`; confirmar su nombre exacto en Actions antes de exigirlo. Si CI falla o se cancela, no se publica.
+CI fallido o cancelado bloquea CD. `Resultado requerido` solo comprueba el estado
+de CI y no repite Gradle. Conservar el check `verify / verify / build` durante la
+transición; exigir el agregador nuevo cuando aparezca y pase en GitHub.
 
-Paquete: `ghcr.io/jjt-ingsis/permissions-service`. El resumen informa SHA, Git tree, plataformas y digest. Usar `image-ref` (`imagen@sha256:...`) para descargar/desplegar; los tags `sha-<SHA completo>` y `run-<run_id>-<run_attempt>` sirven para localizar publicaciones. PostgreSQL y sus credenciales continúan siendo configuración externa; no se incluyen en la imagen.
+Imagen pública: `ghcr.io/jjt-ingsis/permissions-service`. Usar siempre `imagen@sha256:...`;
+los tags `sha-<SHA completo>` y `run-<run_id>-<run_attempt>` sirven para localizarla.
+El resumen y las etiquetas registran origen, Git tree, digest e intento de build.
+Prod exige coincidencia exacta de todo el repositorio, incluso README/workflows;
+sin evidencia confiable falla. Dev puede haber avanzado al promover.
 
-`GH_PACKAGES_USER` y `GH_PACKAGES_READ_TOKEN` son secrets de dependencias, preferentemente de organización con acceso a este repo. Se reenvían como secretos BuildKit. La publicación usa el `GITHUB_TOKEN` automático del repo con `packages: write`, sin PAT adicional de escritura.
+Secrets `GH_PACKAGES_USER` y `GH_PACKAGES_READ_TOKEN`: lectura de dependencias
+Gradle y secretos BuildKit. GHCR usa `GITHUB_TOKEN` automático con `packages: write`;
+CD agrega lectura de Actions/PR y `deployments: write`, sin otro PAT para las VMs.
+`DOCKER_PLATFORMS` tiene default linux/amd64, compatible con las VMs x64.
 
-`DOCKER_PLATFORMS` es una variable de repositorio opcional; default `linux/amd64`. Confirmar la arquitectura con Thiago. Valores admitidos: `linux/amd64`, `linux/arm64` o `linux/amd64,linux/arm64`.
+En **este repo**, environments dev (solo dev) y prod (solo main): variables
+`SSH_HOST`, `SSH_USER`, `SSH_PORT`; secrets `SSH_PRIVATE_KEY`, `SSH_KNOWN_HOSTS`.
+Los resuelve el job final del workflow reutilizable. No son las contraseñas de
+runtime ni activan el perfil Spring. Configurar una clave dedicada y host keys
+verificadas con Thiago.
 
-Preparar GitHub Environments `dev` limitado a dev y `prod` limitado a main. El contrato de SNI-25 define variables `SSH_HOST`, `SSH_USER`, `SSH_PORT` y secrets `SSH_PRIVATE_KEY`, `SSH_KNOWN_HOSTS`. Los valores reales se cargan/verifican con las VMs y el stack disponibles. Estos environments no configuran automáticamente el datasource ni el perfil de Spring.
+Habilitación gradual con variables **de repositorio**:
 
-Ver inputs/outputs, visibilidad de paquetes, permisos y orden de integración en el [README central](https://github.com/JJT-INGSIS/github-workflows/blob/main/README.md). Las primeras publicaciones y verificaciones del pipeline nuevo quedan pendientes de integrar/publicar la versión central.
+- Sin `CD_ENABLED=true`, continúa CI/publicación sin despliegue remoto.
+- Habilitar dev después del bootstrap, credenciales y revisión fija de infra.
+- Configurar `PROD_DEPLOY_ENABLED=true` solo después de verificar las reglas
+  completas de main y prod. El 13/10/2026 se activó y se verificó `Do not allow
+  bypassing the above settings` en main: PR, CI y base actualizada se exigen también
+  a administradores. El despliegue automático a producción sigue deshabilitado.
+
+El despliegue cambia solo esta aplicación y conserva bases y otras imágenes.
+Una pérdida SSH se reconcilia con el journal de la VM; rollback mantiene la Action
+roja y no revierte migraciones ni datos. Conservar contratos y esquemas compatibles
+con la versión anterior. Una VM apagada produce fallo, sin encendido automático.
+
+Ver [operación y recuperación SNI-25](https://github.com/JJT-INGSIS/snippet-searcher-infra/blob/dev/docs/sni-25-cd.md).
+La integración por tag, resolución de environment secrets y el recorrido real
+dev → prod quedan pendientes de la configuración y pruebas con VMs encendidas.
