@@ -4,6 +4,8 @@ Servicio HTTP de permisos de Snippet Searcher con Kotlin, Spring Boot y PostgreS
 
 El contrato HTTP, las respuestas idempotentes y los errores Problem Details están documentados en [docs/ownership.md](docs/ownership.md), con ejemplos verificados en cada build. La API es interna y todavía no autentica al caller.
 
+El contrato propuesto de acceso y sharing para listado, detalle y US7 está en [docs/access.md](docs/access.md) (SNI-26). Todavía no está implementado.
+
 Usa `jjt.spring-service:0.2.0` de `gradle-conventions`, JDK 21 y el wrapper Gradle 9.3.0.
 
 Gradle selecciona JDK 21 para su daemon mediante `gradle/gradle-daemon-jvm.properties`, aunque el Java predeterminado de la terminal sea otra versión compatible con el wrapper. Debe haber un JDK 21 instalado.
