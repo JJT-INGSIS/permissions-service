@@ -24,6 +24,12 @@ open class PostgresHttpTest(
         body: String,
     ): HttpResponse<String> = send("PUT", "/ownership/$snippetId", body)
 
+    protected fun share(
+        snippetId: String,
+        recipientId: String,
+        actorId: String,
+    ): HttpResponse<String> = send("PUT", "/ownership/$snippetId/shares/$recipientId", """{"actorId":"$actorId"}""")
+
     protected fun json(response: HttpResponse<String>): JsonNode = mapper.readTree(response.body())
 
     protected fun send(

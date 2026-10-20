@@ -1,10 +1,10 @@
 # Permissions Service
 
-Servicio HTTP de permisos de Snippet Searcher con Kotlin, Spring Boot y PostgreSQL mediante JDBC. Registra el propietario de cada snippet y comprueba si un actor puede modificarlo. Flyway crea y versiona el esquema; no se utiliza generación automática de tablas con Hibernate.
+Servicio HTTP de permisos de Snippet Searcher con Kotlin, Spring Boot y PostgreSQL mediante JDBC. Registra el propietario de cada snippet, comprueba si un actor puede modificarlo, registra con quién se comparte cada snippet e informa qué snippets puede leer cada actor. Flyway crea y versiona el esquema; no se utiliza generación automática de tablas con Hibernate.
 
 El contrato HTTP, las respuestas idempotentes y los errores Problem Details están documentados en [docs/ownership.md](docs/ownership.md), con ejemplos verificados en cada build. La API es interna y todavía no autentica al caller.
 
-El contrato propuesto de acceso y sharing para listado, detalle y US7 está en [docs/access.md](docs/access.md) (SNI-26). Todavía no está implementado.
+El acceso de lectura y el sharing (US5–7) están documentados en [docs/access.md](docs/access.md): contrato acordado en SNI-26 e implementado en SNI-28, con ejemplos verificados en cada build. Un share concede lectura; no concede modificar ni volver a compartir.
 
 Usa `jjt.spring-service:0.2.0` de `gradle-conventions`, JDK 21 y el wrapper Gradle 9.3.0.
 

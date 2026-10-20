@@ -49,6 +49,8 @@ Otro actor recibe `200 OK`:
 
 Un actor vacío o ausente devuelve `400`. Si no existe la relación, devuelve `404`. Una falla técnica devuelve `500`, nunca `allowed: false`. El valor del query parameter debe codificarse como URL; un `+` literal requiere `%2B`.
 
+Un share no habilita la modificación: un destinatario recibe `allowed: false`, igual que cualquier otro actor que no es owner. El acceso de lectura y el sharing están en [access.md](access.md).
+
 ## Errores
 
 Los errores HTTP usan `application/problem+json`. Por ejemplo, al registrar un owner diferente:
