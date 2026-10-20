@@ -1,9 +1,12 @@
-# Contrato de acceso y sharing — SNI-26
+# Contrato de acceso y sharing — SNI-26 y SNI-28
 
 API interna de Permissions para Snippets: qué snippets puede ver un actor, qué
-relación tiene con uno y cómo se registra un share. **Es un contrato propuesto,
-todavía no implementado.** Sus ejemplos no se verifican en el build; el contrato
-implementado de ownership sigue en [ownership.md](ownership.md).
+relación tiene con uno y cómo se registra un share. SNI-26 acordó el contrato y
+SNI-28 lo implementa. El contrato de ownership sigue en [ownership.md](ownership.md).
+
+Los ejemplos JSON de esta página son tests: `AccessDocumentationTest` los envía a
+la API real con PostgreSQL y compara las respuestas completas. Si el comportamiento
+cambia y el ejemplo no, el build falla.
 
 Lo usa el contrato público de Snippets para listado, detalle y sharing
 ([ui-integration.md de Snippets](https://github.com/JJT-INGSIS/snippets-service/blob/dev/docs/ui-integration.md)).
@@ -81,7 +84,7 @@ Responde `200 OK`:
 ```
 
 `actorId` es quien pide compartir. Permissions verifica que sea el owner y
-registra el share en la misma transacción: no hay una ventana entre comprobar y
+registra el share en una sola sentencia SQL: no hay una ventana entre comprobar y
 guardar.
 
 Si es nuevo, responde `201 Created`:
@@ -107,28 +110,65 @@ Snippets elija entre `403` y `404`:
 | Status | `type` | Significado |
 | --- | --- | --- |
 | 400 | `urn:permissions:problem:invalid-request` | UUID inválido, `actorId` ausente o en blanco, `relation` desconocida o body mal formado. |
-| 403 | `urn:permissions:problem:share-denied` | **Nuevo.** El actor no es el owner. `relation` vale `shared` o `none`. |
+| 403 | `urn:permissions:problem:share-denied` | El actor no es el owner. `relation` vale `shared` o `none`. |
 | 404 | `urn:permissions:problem:ownership-not-found` | No hay owner registrado para ese snippet. |
-| 422 | `urn:permissions:problem:invalid-recipient` | **Nuevo.** El destinatario es el propio owner. |
+| 422 | `urn:permissions:problem:invalid-recipient` | El owner intenta compartirse el snippet a sí mismo. |
 | 500 | `urn:permissions:problem:technical-failure` | La operación falló; no asumir share registrado, lista vacía ni acceso denegado. |
 
 Permissions no sabe si el destinatario existe: no es dueño de usuarios. Snippets
 lo comprueba antes contra su directorio de desarrollo y, en el futuro, contra Auth0.
 
-## Persistencia propuesta
+## Cómo se garantiza
 
-Una tabla nueva en la base de Permissions, creada con una migración Flyway:
+| Garantía | Cómo |
+| --- | --- |
+| Solo el owner comparte | Una sola sentencia `INSERT … SELECT` inserta el share únicamente si `snippet_ownership` tiene a `actorId` como owner. Comprobar y guardar ocurren juntos: no hay una ventana entre las dos cosas. |
+| Sin duplicados | Clave primaria `(snippet_id, recipient_id)` con `ON CONFLICT DO NOTHING`. Entre pedidos simultáneos iguales, uno recibe `201` y el resto `200`. |
+| Sin IDs repetidos en la lista | La consulta devuelve una fila por ownership, unida al share del actor si existe. Un snippet no puede aparecer dos veces. |
+| Un share no habilita edición | `can-modify` sigue comparando solo contra el owner. |
+| Falla no es ausencia | Las fallas JDBC y de transacción se informan como `technical-failure`, nunca como lista vacía, `none` ni `share-denied`. |
+
+La regla «solo el owner comparte y nadie se comparte a sí mismo» la decide el caso
+de uso `ShareSnippet`. La persistencia solo inserta el share si el owner es el que
+recibe; no decide autorización.
+
+Si el actor pide compartirse el snippet a sí mismo, `ShareSnippet` no intenta el
+registro: consulta su relación y responde `422` si es el owner o `403` si no lo es.
+Cuando el registro no inserta porque el actor no es owner, la misma consulta de
+relación elige el `relation` del `403`.
+
+## Persistencia
+
+La migración `V2__create_snippet_shares.sql` crea `snippet_shares` en la base de
+Permissions:
 
 | Columna | Tipo | Regla |
 | --- | --- | --- |
 | `snippet_id` | UUID | Referencia a `snippet_ownership`. |
 | `recipient_id` | TEXT | No blanco. |
 
-La clave primaria `(snippet_id, recipient_id)` evita shares duplicados. No se
-guarda contenido, metadatos ni perfiles de usuario.
+La clave primaria `(snippet_id, recipient_id)` evita shares duplicados. Un índice
+sobre `recipient_id` sirve a la lista de compartidos y otro sobre
+`snippet_ownership(owner_id)` a la de propios. No se guarda contenido, metadatos
+ni perfiles de usuario. No existe revocación: US7 no la pide.
 
 ## Qué no cambia
 
 `PUT /ownership/{snippetId}`, `GET /ownership/{snippetId}` y
 `GET /ownership/{snippetId}/can-modify` conservan su contrato
 ([ownership.md](ownership.md)).
+
+## Verificación
+
+`sh ./gradlew check` ejecuta estas pruebas junto con las de ownership. Las que usan
+HTTP o PostgreSQL requieren Docker para Testcontainers.
+
+| Prueba | Qué comprueba |
+| --- | --- |
+| `AccessRelationTest` | La regla de relación: el owner gana sobre un share y las identidades se comparan exactas. |
+| `ShareSnippetTest` | Cada resultado del caso de uso sin base de datos, incluido que compartirse a uno mismo no intenta registrar nada. |
+| `AccessHttpTest` | Los tres endpoints: el destinatario lee sin poder modificar, `403` con su `relation`, `422`, `404`, listas propias/compartidas/todas sin repetidos y `400` ante entradas inválidas. |
+| `ShareConcurrencyTest` | Ocho shares iguales simultáneos crean una sola fila; ocho intentos simultáneos de no-owners no crean ninguna. |
+| `OwnershipPersistenceTest` | La migración V2 se aplica una vez y un share sigue visible después de reiniciar la aplicación. |
+| `OwnershipFailureTest` y `JdbcOwnershipFailureTest` | Una base caída se informa como `technical-failure`, nunca como lista vacía, `none`, `share-denied` ni éxito. |
+| `AccessDocumentationTest` | Los ejemplos JSON de esta página coinciden con las respuestas reales.
