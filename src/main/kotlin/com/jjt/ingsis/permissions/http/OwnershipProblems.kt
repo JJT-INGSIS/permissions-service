@@ -1,5 +1,6 @@
 package com.jjt.ingsis.permissions.http
 
+import com.jjt.ingsis.permissions.domain.AccessRelation
 import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.http.ProblemDetail
@@ -20,6 +21,25 @@ class OwnershipProblems {
     fun invalidActor(): ResponseEntity<ProblemDetail> =
         response(HttpStatus.BAD_REQUEST, "invalid-request", "actorId must not be blank.")
 
+    fun invalidRelation(): ResponseEntity<ProblemDetail> =
+        response(HttpStatus.BAD_REQUEST, "invalid-request", "relation must be all, owned or shared.")
+
+    fun invalidRecipientId(): ResponseEntity<ProblemDetail> =
+        response(HttpStatus.BAD_REQUEST, "invalid-request", "recipientId must not be blank.")
+
+    fun shareDenied(relation: AccessRelation): ResponseEntity<ProblemDetail> {
+        val problem = problem(HttpStatus.FORBIDDEN, "share-denied", "Only the owner can share this snippet.")
+        problem.setProperty("relation", relation.wireName())
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(problem)
+    }
+
+    fun invalidRecipient(): ResponseEntity<ProblemDetail> =
+        response(
+            HttpStatus.UNPROCESSABLE_CONTENT,
+            "invalid-recipient",
+            "The owner cannot share a snippet with themselves.",
+        )
+
     fun failure(cause: Exception): ResponseEntity<ProblemDetail> {
         logger.error("Ownership operation failed", cause)
         return response(
@@ -33,9 +53,15 @@ class OwnershipProblems {
         status: HttpStatus,
         category: String,
         detail: String,
-    ): ResponseEntity<ProblemDetail> {
+    ): ResponseEntity<ProblemDetail> = ResponseEntity.status(status).body(problem(status, category, detail))
+
+    private fun problem(
+        status: HttpStatus,
+        category: String,
+        detail: String,
+    ): ProblemDetail {
         val problem = ProblemDetail.forStatusAndDetail(status, detail)
         problem.type = URI.create("urn:permissions:problem:$category")
-        return ResponseEntity.status(status).body(problem)
+        return problem
     }
 }

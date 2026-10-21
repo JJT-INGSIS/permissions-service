@@ -1,10 +1,17 @@
 package com.jjt.ingsis.permissions
 
+import com.jjt.ingsis.permissions.application.ShareResult
+import com.jjt.ingsis.permissions.application.ShareSnippet
+import com.jjt.ingsis.permissions.domain.AccessLookup
+import com.jjt.ingsis.permissions.domain.AccessReader
+import com.jjt.ingsis.permissions.domain.AccessRelation
 import com.jjt.ingsis.permissions.domain.Ownership
 import com.jjt.ingsis.permissions.domain.OwnershipInsert
 import com.jjt.ingsis.permissions.domain.OwnershipLookup
 import com.jjt.ingsis.permissions.domain.OwnershipReader
 import com.jjt.ingsis.permissions.domain.OwnershipRegistrar
+import com.jjt.ingsis.permissions.domain.SnippetAccess
+import com.jjt.ingsis.permissions.domain.SnippetShare
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Test
@@ -36,11 +43,11 @@ class OwnershipPersistenceTest
         }
 
         @Test
-        fun migrationCreatesTheSchemaAndAppliesOnlyOnce() {
+        fun migrationsCreateTheSchemaAndApplyOnlyOnce() {
             assertEquals(
-                1,
+                2,
                 jdbc.queryForObject(
-                    "SELECT COUNT(*) FROM flyway_schema_history WHERE version = '1' AND success = TRUE",
+                    "SELECT COUNT(*) FROM flyway_schema_history WHERE version IN ('1', '2') AND success = TRUE",
                     Int::class.java,
                 ),
             )
@@ -59,6 +66,22 @@ class OwnershipPersistenceTest
                 assertEquals(
                     OwnershipLookup.Found(ownership),
                     context.getBean(OwnershipReader::class.java).find(ownership.snippetId),
+                )
+            }
+        }
+
+        @Test
+        fun sharesSurviveClosingAndReopeningApplicationContexts() {
+            val share = SnippetShare(UUID.randomUUID(), "dev-thiago")
+            val owner = "owner-${share.snippetId}"
+            newContext().use { context ->
+                context.getBean(OwnershipRegistrar::class.java).register(Ownership(share.snippetId, owner))
+                assertEquals(ShareResult.Created(share), context.getBean(ShareSnippet::class.java).share(share, owner))
+            }
+            newContext().use { context ->
+                assertEquals(
+                    AccessLookup.Found(SnippetAccess(share.snippetId, owner, AccessRelation.SHARED)),
+                    context.getBean(AccessReader::class.java).find(share.snippetId, "dev-thiago"),
                 )
             }
         }
