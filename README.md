@@ -254,3 +254,12 @@ con la versión anterior. Una VM apagada produce fallo, sin encendido automátic
 Ver [operación y recuperación SNI-25](https://github.com/JJT-INGSIS/snippet-searcher-infra/blob/dev/docs/sni-25-cd.md).
 La integración por tag, resolución de environment secrets y el recorrido real
 dev → prod quedan pendientes de la configuración y pruebas con VMs encendidas.
+
+## SNI-43 — actualización de herramientas de CD
+
+El caller preparado usa `github-workflows@v0.6.0`. Integrar únicamente después de
+publicar y verificar esa versión central con el SHA definitivo de infra. La versión
+nueva admite el stack anterior; actualizar los tres callers del ambiente antes de
+incorporar NGINX/Asset/UI. No reejecutar versiones antiguas para operar el stack ampliado.
+El procedimiento y la protección del registro están en
+[rollout SNI-43](https://github.com/JJT-INGSIS/snippet-searcher-infra/blob/dev/docs/sni-43-cd.md).
