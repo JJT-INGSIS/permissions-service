@@ -257,13 +257,6 @@ dev → prod quedan pendientes de la configuración y pruebas con VMs encendidas
 
 ## SNI-43 — actualización de herramientas de CD
 
-El caller preparado usa `github-workflows@v0.6.0`. Integrar únicamente después de
-publicar y verificar esa versión central con el SHA definitivo de infra. La versión
-nueva admite el stack anterior; actualizar los tres callers del ambiente antes de
-incorporar NGINX/Asset/UI. No reejecutar versiones antiguas para operar el stack ampliado.
+El caller usa `github-workflows@v0.6.2`, con la revisión fija de infra que corrige el doble escape de healthchecks. Antes de reaplicar infraestructura o probar reconciliación, actualizar los cuatro callers del ambiente y esperar que no haya ejecuciones activas. No reejecutar herramientas antiguas sobre el stack ampliado.
 El procedimiento y la protección del registro están en
 [rollout SNI-43](https://github.com/JJT-INGSIS/snippet-searcher-infra/blob/dev/docs/sni-43-cd.md).
-
-## Herramientas de CD — SNI-44
-
-El caller usa workflows centrales `v0.6.2`, con la revisión fija de infra que corrige el doble escape de healthchecks. Este mantenimiento cambia sólo herramientas y documentación: no promueve funcionalidades nuevas de dev ni cambia la imagen en producción. Antes de reaplicar infraestructura, actualizar los cuatro callers del ambiente y esperar ejecuciones activas; no reejecutar herramientas antiguas sobre el stack ampliado.

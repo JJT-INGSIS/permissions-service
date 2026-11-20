@@ -13,6 +13,7 @@ RUN groupadd --gid 10001 app \
     && useradd --uid 10001 --gid app --no-create-home --shell /usr/sbin/nologin app
 WORKDIR /app
 COPY --from=build --chown=10001:10001 /app/build/libs/app.jar app.jar
+COPY --from=build /app/build/newrelic /app/newrelic
 USER 10001:10001
 EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENTRYPOINT ["/app/newrelic/start-service.sh", "/app/app.jar"]
