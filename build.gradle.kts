@@ -24,5 +24,5 @@ tasks.named<org.springframework.boot.gradle.tasks.bundling.BootJar>("bootJar") {
 }
 
 tasks.test {
-    inputs.dir("docs")
+    inputs.files("docs/access.md", "docs/ownership.md")
 }
