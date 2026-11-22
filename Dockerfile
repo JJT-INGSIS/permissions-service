@@ -2,11 +2,14 @@
 
 FROM eclipse-temurin:21-jdk-jammy AS build
 WORKDIR /app
-COPY . .
-RUN chmod +x gradlew
-RUN --mount=type=secret,id=github_actor,env=GITHUB_ACTOR,required=true \
+COPY gradlew build.gradle.kts settings.gradle.kts ./
+COPY gradle ./gradle
+COPY src/main ./src/main
+
+RUN --mount=type=cache,id=permissions-gradle,target=/root/.gradle,sharing=locked \
+    --mount=type=secret,id=github_actor,env=GITHUB_ACTOR,required=true \
     --mount=type=secret,id=github_token,env=GITHUB_TOKEN,required=true \
-    ./gradlew bootJar --no-daemon
+    sh ./gradlew bootJar --no-daemon
 
 FROM eclipse-temurin:21-jre-jammy AS runtime
 RUN groupadd --gid 10001 app \
