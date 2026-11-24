@@ -1,86 +1,94 @@
-# Contrato de ownership
+# Titularidad de snippets
 
-API interna de Permissions para Snippets. No autentica al caller: Snippets debe obtener la identidad del contexto de la operación y enviarla explícitamente. No se debe aceptar un owner arbitrario enviado por el frontend.
+API interna de Permissions. Snippets obtiene la identidad del contexto de la
+operación y envía el ID del propietario o del actor, según corresponda.
+Permissions persiste la relación sin autenticar la llamada ni consultar los
+datos del snippet. [Acceso y uso compartido](access.md).
 
-Base URL entre contenedores: `http://permissions-service:8080`. Desde el host, con el puerto de desarrollo publicado: `http://localhost:8081`.
+La URL entre contenedores es `http://permissions-service:8080`. Desde el host
+local, si está publicado el puerto de desarrollo, es `http://localhost:8081`.
 
 ## Identificadores
 
-- `snippetId`: UUID en formato de 36 caracteres con guiones. Lo genera Snippets; Permissions conserva el mismo identificador.
-- `ownerId` y `actorId`: strings obligatorios, no vacíos ni compuestos sólo por espacios. Se comparan exactamente: no se recortan, convierten a minúsculas ni interpretan. Por ejemplo, `dev-thiago` en desarrollo o un futuro subject de Auth0.
-- Permissions no consulta la existencia del snippet en otro servicio.
-- Los requests y responses exitosos usan `application/json`. Un JSON mal formado, un UUID inválido, campos obligatorios ausentes/nulos, un owner que no sea string o una identidad en blanco devuelve `400`.
+- `snippetId` es el UUID de 36 caracteres con guiones generado por Snippets.
+- `ownerId`, `actorId` y `recipientId` son cadenas no vacías y no compuestas
+  solo por espacios. Se comparan exactamente. Pueden contener un identificador
+  del entorno local como `dev-thiago` o un `sub` de Auth0.
+- Codificá los IDs que viajan como parámetros de URL. Un `+` literal se
+  representa como `%2B`.
 
 ## Registrar propietario
 
-`PUT /ownership/550e8400-e29b-41d4-a716-446655440000`, con `Content-Type: application/json`:
+`PUT /ownership/550e8400-e29b-41d4-a716-446655440000` con
+`Content-Type: application/json`:
 
 ```json
 {"ownerId":"dev-thiago"}
 ```
 
-Si es nuevo, responde `201 Created`, con `Location: /ownership/550e8400-e29b-41d4-a716-446655440000`:
+Si es nuevo, devuelve `201 Created` con el encabezado
+`Location: /ownership/550e8400-e29b-41d4-a716-446655440000`:
 
 ```json
 {"snippetId":"550e8400-e29b-41d4-a716-446655440000","ownerId":"dev-thiago"}
 ```
 
-Repetir el mismo registro devuelve `200 OK` y el mismo body, sin duplicar datos. Registrar otro owner para ese UUID devuelve `409 Conflict` y conserva el original. El endpoint no transfiere ownership.
+Repetir el registro con el mismo propietario devuelve `200 OK` y el mismo
+cuerpo. Un ID de propietario distinto para el mismo UUID devuelve
+`409 Conflict` y conserva la titularidad registrada.
 
-Ante concurrencia, PostgreSQL decide un único ganador mediante la clave primaria. Las solicitudes del mismo owner pueden reintentarse; las de otro owner reciben conflicto. La respuesta de éxito se envía después del commit.
+La clave primaria de PostgreSQL garantiza una sola relación por snippet
+también con pedidos concurrentes. El éxito se devuelve después del commit.
+Si un timeout deja el resultado incierto, repetí el pedido con el mismo UUID
+y el mismo ID de propietario.
 
 ## Consultar propietario
 
-`GET /ownership/{snippetId}` devuelve `200` con la misma representación del registro. Si no hay relación de ownership, devuelve `404`.
+`GET /ownership/{snippetId}` devuelve `200 OK` con la misma representación
+del registro. Si falta el registro, devuelve `404 ownership-not-found`.
 
 ## Comprobar modificación
 
-`GET /ownership/{snippetId}/can-modify?actorId=dev-thiago`:
+`GET /ownership/{snippetId}/can-modify?actorId=dev-thiago` devuelve
+`200 OK`. Si el actor es el propietario:
 
 ```json
 {"allowed":true}
 ```
 
-Otro actor recibe `200 OK`:
+Si es otro actor, incluso un destinatario con acceso compartido:
 
 ```json
 {"allowed":false}
 ```
 
-Un actor vacío o ausente devuelve `400`. Si no existe la relación, devuelve `404`. Una falla técnica devuelve `500`, nunca `allowed: false`. El valor del query parameter debe codificarse como URL; un `+` literal requiere `%2B`.
-
-Un share no habilita la modificación: un destinatario recibe `allowed: false`, igual que cualquier otro actor que no es owner. El acceso de lectura y el sharing están en [access.md](access.md).
+Un actor ausente o en blanco devuelve `400`. Si falta el registro de titularidad,
+devuelve `404`. Una falla técnica devuelve `500`.
 
 ## Errores
 
-Los errores HTTP usan `application/problem+json`. Por ejemplo, al registrar un owner diferente:
+Los errores usan `application/problem+json`. Ejemplo al intentar registrar
+otro propietario para el mismo snippet:
 
 ```json
 {"type":"urn:permissions:problem:owner-conflict","title":"Conflict","status":409,"detail":"The snippet already has a different owner.","instance":"/ownership/550e8400-e29b-41d4-a716-446655440000"}
 ```
 
-| Status | type | Significado |
+| Estado HTTP | `type` | Significado |
 | --- | --- | --- |
-| 400 | `urn:permissions:problem:invalid-request` | Request inválido; revisar la integración que lo construye. |
-| 404 | `urn:permissions:problem:ownership-not-found` | No hay un propietario registrado para ese snippet. |
-| 409 | `urn:permissions:problem:owner-conflict` | El UUID ya pertenece a otro actor. |
-| 500 | `urn:permissions:problem:technical-failure` | La operación falló; no asumir registro exitoso ni permiso denegado. |
-| Otros errores HTTP, como 405/415 | `urn:permissions:problem:http-error` | Método o representación no soportados. |
+| 400 | `urn:permissions:problem:invalid-request` | UUID, identidad o cuerpo inválido, incluidos campos obligatorios ausentes. |
+| 404 | `urn:permissions:problem:ownership-not-found` | Falta el registro de titularidad. |
+| 409 | `urn:permissions:problem:owner-conflict` | Ya existe otro propietario para el UUID. |
+| 500 | `urn:permissions:problem:technical-failure` | La operación falló. |
+| Otros errores HTTP, como 405 o 415 | `urn:permissions:problem:http-error` | Error HTTP general, como método o representación no soportados. |
 
-`type` es el identificador estable para decidir comportamiento. `title` y `detail` son mensajes humanos y pueden cambiar. `instance` identifica la ruta de la solicitud. Los errores técnicos no incluyen SQL, credenciales ni detalles internos.
-
-Si un request no obtiene respuesta, Snippets debe tratarlo como falla técnica. Tras un timeout de registro, puede repetir el mismo UUID y owner para resolver un resultado incierto de forma idempotente.
-
-## Coordinación con Snippets y PrintScript
-
-Snippets coordina la validación de código, almacenamiento, metadatos y registro de ownership; define cómo recuperar altas parciales. Permissions sólo persiste y consulta la relación.
-
-PrintScript valida por `POST /validate`, con `code` y `version` obligatorios. Sólo un `200` con `valid: true` habilita continuar el guardado. Un `200` con `valid: false` indica código inválido; un `400`, `422`, `500` o ausencia de respuesta tiene otro significado. Esta API de Permissions no llama a PrintScript.
+Usá `type` como identificador estable. `title` y `detail` describen el problema
+para quien lo lee. `instance` identifica la ruta. Las respuestas de falla
+técnica excluyen SQL, credenciales y otros detalles internos.
 
 ## Verificación
 
-`sh ./gradlew check` ejecuta pruebas unitarias y HTTP contra PostgreSQL 18.6 con Testcontainers, además de ktlint y detekt. Requiere Docker disponible y JDK 21. Los ejemplos JSON de esta página se leen y comprueban contra la API en `OwnershipDocumentationTest`.
-
-Flyway crea el esquema automáticamente en una base vacía y valida las migraciones al reiniciar. La relación vive en la base propia de Permissions. El usuario de base necesita permiso para crear la tabla y el historial de migraciones.
-
-Las pruebas verifican idempotencia, concurrencia, conservación del propietario, rollback, persistencia tras reiniciar la aplicación y separación entre denegación y falla técnica.
+Flyway administra el esquema en la base propia de Permissions.
+`OwnershipDocumentationTest` comprueba los ejemplos JSON con HTTP y PostgreSQL.
+`./gradlew check` ejecuta la suite, que requiere JDK 21 y Docker para
+Testcontainers.
