@@ -1,14 +1,17 @@
 # syntax=docker/dockerfile:1
 
-FROM eclipse-temurin:21-jdk-jammy AS build
+FROM eclipse-temurin:21-jdk-jammy@sha256:b2711c65970c1227197c29c46e669bfdbb137524e9da0e664703a140ec25a040 AS build
 WORKDIR /app
-COPY . .
-RUN chmod +x gradlew
-RUN --mount=type=secret,id=github_actor,env=GITHUB_ACTOR,required=true \
-    --mount=type=secret,id=github_token,env=GITHUB_TOKEN,required=true \
-    ./gradlew bootJar --no-daemon
+COPY gradlew build.gradle.kts settings.gradle.kts ./
+COPY gradle ./gradle
+COPY src/main ./src/main
 
-FROM eclipse-temurin:21-jre-jammy AS runtime
+RUN --mount=type=cache,id=permissions-gradle,target=/root/.gradle,sharing=locked \
+    --mount=type=secret,id=github_actor,env=GITHUB_ACTOR,required=true \
+    --mount=type=secret,id=github_token,env=GITHUB_TOKEN,required=true \
+    sh ./gradlew bootJar --no-daemon
+
+FROM eclipse-temurin:21-jre-jammy@sha256:a8bff88f760e87e0c8844f8461f807c203fd5e8f78c951c843024647e965eaf5 AS runtime
 RUN groupadd --gid 10001 app \
     && useradd --uid 10001 --gid app --no-create-home --shell /usr/sbin/nologin app
 WORKDIR /app
